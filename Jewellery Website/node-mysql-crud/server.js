@@ -1,103 +1,3 @@
-// const express = require('express');
-// const mysql = require('mysql2');
-// const bcrypt = require('bcryptjs');
-// const cors = require('cors');
-// const bodyParser = require('body-parser');
-// const authRoutes = require("./routes/authRoutes");
-// const productRoutes = require("./routes/productRoutes");
-
-// const app = express();
-// app.use(cors());
-// app.use(bodyParser.json());
-
-// // MySQL Connection
-// const db = mysql.createConnection({
-//   host: 'localhost',
-//   user: 'root',         // Your MySQL username
-//   password: '',         // Your MySQL password (leave empty if not set)
-//   database: 'e-commerce' // Your database name
-// });
-
-// db.connect((err) => {
-//   if (err) {
-//     console.error('Error connecting to the database:', err);
-//     return;
-//   }
-//   console.log('Database connected');
-// });
-
-// // Register Route
-// app.post('/register', async (req, res) => {
-//   const { email, password, role } = req.body;
-  
-//   const checkEmailQuery = 'SELECT * FROM users WHERE email = ?';
-//   db.query(checkEmailQuery, [email], async (err, result) => {
-//     if (err) {
-//       console.error('Database error:', err);
-//       return res.status(500).json({ message: 'Database error' });
-//     }
-
-//     if (result.length > 0) {
-//       return res.status(400).json({ message: 'Email already exists' });
-//     }
-
-//     // Hash the password
-//     const hashedPassword = await bcrypt.hash(password, 10);
-//     const query = 'INSERT INTO users (email, password, role) VALUES (?, ?, ?)';
-//     db.query(query, [email, hashedPassword, role], (err, result) => {
-//       if (err) {
-//         console.error('Error inserting data:', err);
-//         return res.status(500).json({ message: 'Database insert error' });
-//       }
-//       res.status(201).json({ message: 'Registered successfully' });
-//     });
-//   });
-// });
-
-// // Login Route
-// app.post('/login', (req, res) => {
-//   const { email, password } = req.body;
-
-//   const query = 'SELECT * FROM users WHERE email = ?';
-//   db.query(query, [email], async (err, result) => {
-//     if (err) {
-//       console.error('Database error:', err);
-//       return res.status(500).json({ message: 'Database error' });
-//     }
-
-//     if (result.length === 0) {
-//       return res.status(400).json({ message: 'User not found' });
-//     }
-
-//     const user = result[0];
-//     const isMatch = await bcrypt.compare(password, user.password);
-
-//     if (!isMatch) {
-//       return res.status(400).json({ message: 'Invalid credentials' });
-//     }
-
-//     res.json({ message: 'Welcome to the page' });
-//   });
-// });
-
-
-
-
-// app.use("/api/auth", authRoutes);
-// app.use('/uploads', express.static('uploads'));
-// app.use("/api/products", productRoutes);
-
-// // Server Listening
-// app.listen(5000, () => {
-//   console.log('Server is running on port 5000');
-// });
-
-
-
-
-
-
-
 const express = require('express');
 const mysql = require('mysql2');
 const bcrypt = require('bcryptjs');
@@ -111,66 +11,45 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// ✅ MySQL Connection
-const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',         // Your MySQL username
-  password: '',         // Your MySQL password (leave empty if not set)
-  database: 'e-commerce' // Your database name
-});
+// ✅ MySQL Connection - use the connection pool from db.js
+const db = require('./models/db');
 
-db.connect((err) => {
-  if (err) {
-    console.error('Error connecting to the database:', err);
-    return;
-  }
-  console.log('Database connected');
-});
+// No need for db.connect since we're using a pool
 
 // ✅ Register Route
 app.post('/register', async (req, res) => {
-  const { email, password, role } = req.body;
-  
-  const checkEmailQuery = 'SELECT * FROM users WHERE email = ?';
-  db.query(checkEmailQuery, [email], async (err, result) => {
-    if (err) {
-      console.error('Database error:', err);
-      return res.status(500).json({ message: 'Database error' });
-    }
-
-    if (result.length > 0) {
+  try {
+    const { email, password, role } = req.body;
+    
+    const [checkResult] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
+    
+    if (checkResult.length > 0) {
       return res.status(400).json({ message: 'Email already exists' });
     }
 
     // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
-    const query = 'INSERT INTO users (email, password, role) VALUES (?, ?, ?)';
-    db.query(query, [email, hashedPassword, role], (err, result) => {
-      if (err) {
-        console.error('Error inserting data:', err);
-        return res.status(500).json({ message: 'Database insert error' });
-      }
-      res.status(201).json({ message: 'Registered successfully' });
-    });
-  });
+    await db.execute('INSERT INTO users (email, password, role) VALUES (?, ?, ?)', [email, hashedPassword, role]);
+    
+    res.status(201).json({ message: 'Registered successfully' });
+  } catch (err) {
+    console.error('Database error:', err);
+    res.status(500).json({ message: 'Database error' });
+  }
 });
 
 // ✅ Login Route
-app.post('/login', (req, res) => {
-  const { email, password } = req.body;
+app.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
 
-  const query = 'SELECT * FROM users WHERE email = ?';
-  db.query(query, [email], async (err, result) => {
-    if (err) {
-      console.error('Database error:', err);
-      return res.status(500).json({ message: 'Database error' });
-    }
+    const [results] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
 
-    if (result.length === 0) {
+    if (results.length === 0) {
       return res.status(400).json({ message: 'User not found' });
     }
 
-    const user = result[0];
+    const user = results[0];
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
@@ -178,32 +57,31 @@ app.post('/login', (req, res) => {
     }
 
     res.json({ message: 'Welcome to the page' });
-  });
+  } catch (err) {
+    console.error('Database error:', err);
+    res.status(500).json({ message: 'Database error' });
+  }
 });
 
 // ✅ Subscription Route
-app.post('/subscribe', (req, res) => {
-  const { email } = req.body;
+app.post('/subscribe', async (req, res) => {
+  try {
+    const { email } = req.body;
 
-  // Insert the subscription email into the database
-  const query = 'INSERT INTO subscriptions (email) VALUES (?)';
-  db.query(query, [email], (err, result) => {
-    if (err) {
-      console.error('Error inserting subscription:', err);
-      return res.status(500).json({ message: 'Database insert error' });
-    }
-
+    // Insert the subscription email into the database
+    await db.execute('INSERT INTO subscriptions (email) VALUES (?)', [email]);
     res.status(201).json({ message: 'Subscription successful' });
-  });
+  } catch (err) {
+    console.error('Error inserting subscription:', err);
+    res.status(500).json({ message: 'Database insert error' });
+  }
 });
-
 
 // ✅ Routes for authentication and product management
 app.use("/api/auth", authRoutes);
 app.use('/uploads', express.static('uploads'));
 app.use("/api/products", productRoutes);
 app.use("/api/wishlist", wishlistRoutes);
-
 
 // ✅ Server Listening
 app.listen(5000, () => {

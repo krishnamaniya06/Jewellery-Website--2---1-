@@ -21,23 +21,43 @@ router.post("/", async (req, res) => {
             return res.status(400).json({ message: "Missing fields" });
         }
 
-        await db.execute(
+        const [result] = await db.execute(
             "INSERT INTO wishlist (product_id, name, price, image) VALUES (?, ?, ?, ?)",
             [product_id, name, price, image]
         );
 
-        res.status(201).json({ message: "Added to wishlist" });
+        // Return the newly added wishlist item with its ID
+        const newItem = {
+            id: result.insertId,
+            product_id,
+            name,
+            price,
+            image
+        };
+        
+        res.status(201).json(newItem);
     } catch (error) {
         console.error("Error adding to wishlist:", error);
         res.status(500).json({ message: "Server error" });
     }
 });
 
-// Remove an item from wishlist
+// Remove an item from wishlist by id
 router.delete("/:id", async (req, res) => {
     try {
         const { id } = req.params;
-        await db.execute("DELETE FROM wishlist WHERE id = ?", [id]);
+        // Try to delete by id first
+        let [result] = await db.execute("DELETE FROM wishlist WHERE id = ?", [id]);
+        
+        // If no rows were affected, try to delete by product_id
+        if (result.affectedRows === 0) {
+            [result] = await db.execute("DELETE FROM wishlist WHERE product_id = ?", [id]);
+        }
+        
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: "Item not found in wishlist" });
+        }
+        
         res.json({ message: "Removed from wishlist" });
     } catch (error) {
         console.error("Error deleting wishlist item:", error);
